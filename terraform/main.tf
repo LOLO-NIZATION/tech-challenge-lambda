@@ -1,47 +1,54 @@
 provider "aws" {
-  region = "us-east-1"
+  region = "us-east-1" # ajuste para sua região preferida
 }
 
-# Role da Lambda
-resource "aws_iam_role" "lambda_role" {
-  name = "lambda_execution_role"
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Action    = "sts:AssumeRole"
-      Effect    = "Allow"
-      Principal = {
-        Service = "lambda.amazonaws.com"
-      }
-    }]
-  })
-}
-
-
-# Função Lambda
-resource "aws_lambda_function" "validate_cpf_lambda" {
-  function_name = "validate-cpf"
-  role          = aws_iam_role.lambda_role.arn
+resource "aws_lambda_function" "cpf_validation_lambda" {
+  function_name = "validate_cpf_lambda"
+  role          = "arn:aws:iam::060254399214:role/LabRole"
   handler       = "index.handler"
-  runtime       = "nodejs14.x"
+  runtime       = "nodejs18.x"
 
-  filename         = "lambda_function.zip" # Zip do código da Lambda
-  source_code_hash = filebase64sha256("lambda_function.zip")
+  filename         = "${path.module}/lambda.zip"
+  source_code_hash = filebase64sha256("${path.module}/lambda.zip")
 
-  environment {
-    variables = {
-      DB_HOST     = "rds-endpoint.amazonaws.com" # Substitua pelo endpoint do seu RDS MySQL
-      DB_USER     = "admin"
-      DB_PASSWORD = "password123"
-      DB_NAME     = "mydatabase"
-    }
-  }
+}
+
+# API Gateway REST API
+resource "aws_api_gateway_rest_api" "cpf_validation_api" {
+  name        = "cpf-validation-api"
+  description = "API Gateway para validar CPF"
+}
+
+# Recurso /validate (Caminho da API)
+resource "aws_api_gateway_resource" "validate_resource" {
+  rest_api_id = aws_api_gateway_rest_api.cpf_validation_api.id
+  parent_id   = aws_api_gateway_rest_api.cpf_validation_api.root_resource_id
+  path_part   = "validate"
+}
+
+# Método POST no caminho /validate
+resource "aws_api_gateway_method" "post_method" {
+  rest_api_id   = aws_api_gateway_rest_api.cpf_validation_api.id
+  resource_id   = aws_api_gateway_resource.validate_resource.id
+  http_method   = "POST"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "lambda_integration" {
+  rest_api_id = aws_api_gateway_rest_api.cpf_validation_api.id
+  resource_id = aws_api_gateway_resource.validate_resource.id
+  http_method = aws_api_gateway_method.post_method.http_method
+  integration_http_method = "POST"
+  type        = "AWS_PROXY"
+  uri         = aws_lambda_function.cpf_validation_lambda.invoke_arn
+}
+
+resource "aws_lambda_permission" "api_gateway_permission" {
+  statement_id  = "AllowAPIGatewayInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.cpf_validation_lambda.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_api_gateway_rest_api.cpf_validation_api.execution_arn}/*/*"
 }
 
 
-# Zipando o código Lambda
-data "archive_file" "lambda_zip" {
-  type        = "zip"
-  source_dir  = "${path.module}/lambda"
-  output_path = "${path.module}/lambda_function.zip"
-}

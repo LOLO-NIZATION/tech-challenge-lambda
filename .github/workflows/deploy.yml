@@ -1,0 +1,40 @@
+name: Deploy Lambda with Terraform
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Check out the repository
+      uses: actions/checkout@v2
+
+    - name: Set up AWS credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-east-1 
+
+    - name: Install dependencies
+      run: |
+        cd lambda
+        npm install
+
+    - name: Package Lambda
+      run: |
+        cd lambda
+        zip -r ../lambda.zip .
+
+    - name: Deploy with Terraform
+      run: |
+        terraform init
+        terraform apply -auto-approve
+      env:
+        DB_PASSWORD: ${{ secrets.DB_PASSWORD }} 
+        DB_USER: ${{ secrets.DB_USER }}
+        DB_HOST: ${{ secrets.DB_HOST }}
