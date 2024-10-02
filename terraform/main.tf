@@ -47,5 +47,3 @@ resource "aws_lambda_permission" "api_gateway_permission" {
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_api_gateway_rest_api.cpf_validation_api.execution_arn}/*/*"
 }
-
-
